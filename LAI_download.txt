@@ -1,0 +1,53 @@
+// 1. 中国区域
+var china = ee.FeatureCollection('/China_WGS');
+
+// 2. 时间范围
+var startDate = ee.Date('2006-01-01');
+var endDate   = ee.Date('2020-12-31');
+
+// 3. 读取 MODIS LAI（Collection 6.1）
+var laiCol = ee.ImageCollection('MODIS/061/MOD15A2H')
+  .filterDate(startDate, endDate)
+  .filterBounds(china)
+  .select('Lai_500m')
+  .map(function (img) {
+    var lai = img.multiply(0.1);
+    lai = lai.updateMask(lai.gte(0).and(lai.lte(8)));
+
+    return lai.copyProperties(img, ['system:time_start']);
+  });
+
+
+Map.centerObject(china, 4);
+Map.addLayer(
+  laiCol.first().clip(china),
+  {
+    min: 0,
+    max: 6,
+    palette: ['#ffffcc', '#a1dab4', '#41b6c4', '#2c7fb8', '#253494']
+  },
+  'LAI sample'
+);
+
+var laiList = laiCol.toList(laiCol.size());
+var nImages = laiCol.size().getInfo();
+
+for (var i = 0; i < nImages; i++) {
+
+  var img = ee.Image(laiList.get(i));
+
+  var dateStr = ee.Date(img.get('system:time_start'))
+    .format('yyyyMMdd')
+    .getInfo();
+
+  Export.image.toDrive({
+    image: img.clip(china),
+    description: 'LAI_8day_China_' + dateStr,
+    folder: 'MODIS_LAI_8day_China_2006_2020',
+    fileNamePrefix: 'LAI_8day_' + dateStr,
+    region: china.geometry(),
+    scale: 500,
+    crs: 'EPSG:4326',
+    maxPixels: 1e13
+  });
+}
